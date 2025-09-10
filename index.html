@@ -136,7 +136,8 @@
                 <div id="button-container" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6" style="display: none;">
                     <button id="true-btn" onclick="checkAnswer(true)" class="w-full text-lg font-bold py-4 px-6 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600">Sự Thật</button>
                     <button id="false-btn" onclick="checkAnswer(false)" class="w-full text-lg font-bold py-4 px-6 rounded-lg bg-rose-500 text-white hover:bg-rose-600">Hư Cấu</button>
-                    <button id="next-btn" onclick="goToNextQuestion()" class="hidden sm:col-span-2 w-full text-lg font-bold py-4 px-6 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">Câu tiếp theo</button>
+                    <button id="prev-btn" onclick="goToPreviousQuestion()" class="hidden sm:col-span-1 w-full text-lg font-bold py-4 px-6 rounded-lg bg-slate-500 text-white hover:bg-slate-600">Câu trước</button>
+                    <button id="next-btn" onclick="goToNextQuestion()" class="hidden sm:col-span-1 w-full text-lg font-bold py-4 px-6 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">Câu tiếp theo</button>
                 </div>
             </div>
 
@@ -280,6 +281,7 @@
             trueBtn: document.getElementById('true-btn'),
             falseBtn: document.getElementById('false-btn'),
             nextBtn: document.getElementById('next-btn'),
+            prevBtn: document.getElementById('prev-btn'),
             learnMoreModal: document.getElementById('learn-more-modal'),
             modalBodyArea: document.getElementById('modal-body-area'),
             voteContainer: document.getElementById('vote-container'),
@@ -609,10 +611,27 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
 
             domElements.questionCard.classList.remove('card-enter-active', 'feedback-correct', 'feedback-incorrect');
             setTimeout(() => domElements.questionCard.classList.add('card-enter-active'), 50);
-            domElements.explanationContainer.style.display = 'none';
-            domElements.trueBtn.style.display = 'block';
-            domElements.falseBtn.style.display = 'block';
-            domElements.nextBtn.style.display = 'none';
+
+            // Logic to display either an answered or unanswered question
+            if (currentQuestion.userAnswer !== undefined) {
+                // Question has been answered, show in review mode
+                showExplanation();
+                domElements.questionCard.classList.add(currentQuestion.isCorrect ? 'feedback-correct' : 'feedback-incorrect');
+                
+                domElements.trueBtn.style.display = 'none';
+                domElements.falseBtn.style.display = 'none';
+                domElements.nextBtn.style.display = 'block';
+                domElements.prevBtn.style.display = currentQuestionIndex > 0 ? 'block' : 'none';
+
+            } else {
+                // New question, show in answer mode
+                domElements.explanationContainer.style.display = 'none';
+                domElements.trueBtn.style.display = 'block';
+                domElements.falseBtn.style.display = 'block';
+                domElements.nextBtn.style.display = 'none';
+                domElements.prevBtn.style.display = 'none';
+            }
+
             showLoading(false);
             domElements.questionText.innerHTML = marked.parseInline(currentQuestion.statement);
             domElements.questionNumberText.textContent = `Câu hỏi ${currentQuestionIndex + 1} trên ${TOTAL_QUESTIONS_PER_GAME}`;
@@ -771,11 +790,17 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
         }
         
         function checkAnswer(userAnswer) {
-            if (!currentQuestion) return;
+            if (!currentQuestion || currentQuestion.userAnswer !== undefined) return; // Don't re-answer
+
+            currentQuestion.userAnswer = userAnswer;
+            const isCorrect = currentQuestion.answer === userAnswer;
+            currentQuestion.isCorrect = isCorrect;
+
             domElements.trueBtn.style.display = 'none';
             domElements.falseBtn.style.display = 'none';
             domElements.nextBtn.style.display = 'block';
-            const isCorrect = currentQuestion.answer === userAnswer;
+            domElements.prevBtn.style.display = currentQuestionIndex > 0 ? 'block' : 'none';
+            
             if (isCorrect) {
                 score++;
                 domElements.questionCard.classList.add("feedback-correct");
@@ -791,6 +816,13 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
             displayQuestion();
         }
         
+        function goToPreviousQuestion() {
+            if (currentQuestionIndex > 0) {
+                currentQuestionIndex--;
+                displayQuestion();
+            }
+        }
+
         function showExplanation() {
             const isCorrectAnswer = currentQuestion.answer;
             const headerText = isCorrectAnswer ? "✅ Đúng vậy, đó là Sự thật!" : "❌ Chính xác, đó là Hư cấu!";
@@ -829,7 +861,6 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
             domElements.finalMessage.textContent = message;
         }
         
-        // ⭐ UPDATE: Logic được tối ưu hóa để ưu tiên bộ nhớ cache
         function openLearnMoreModal() {
             if (!currentQuestion) return;
             domElements.learnMoreModal.classList.add("active");
@@ -843,14 +874,12 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
                 </div>
             `;
 
-            // 1. Kiểm tra xem giải thích chi tiết đã được lưu trong cache chưa
             if (currentQuestion.detailedExplanation) {
                 console.log("Hiển thị giải thích chi tiết được lưu trong bộ nhớ cache.");
                 domElements.modalBodyArea.innerHTML = headerHTML + `<div class="markdown-content">${marked.parse(currentQuestion.detailedExplanation)}</div>`;
                 return;
             }
             
-            // 2. Nếu chưa, hiển thị trình tải và tạo nó
             const loadingContent = `
                 ${headerHTML}
                 <div class="flex flex-col items-center justify-center h-full p-8 text-center">
@@ -878,7 +907,6 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
             });
         }
         
-        // ⭐ UPDATE: Giờ đây, hàm sẽ lưu kết quả vào Firestore
         async function generateDetailedExplanation(level) {
             if (!textModel || !currentQuestion) return null;
             
@@ -902,13 +930,11 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
                 const result = await chatModel.generateContent(prompt);
                 const detailedExplanationText = result.response.text();
 
-                // 3. Lưu kết quả vào Firestore để sử dụng trong tương lai
                 if (detailedExplanationText && currentQuestion.id && currentQuestion.topicId) {
                     console.log("Đang lưu giải thích chi tiết vào bộ nhớ cache...");
                     const questionRef = doc(db, `${currentQuestion.topicId}_questions`, currentQuestion.id);
                     try {
                         await setDoc(questionRef, { detailedExplanation: detailedExplanationText }, { merge: true });
-                        // Cập nhật đối tượng cục bộ để ngăn chặn việc tìm nạp lại trong cùng một phiên
                         currentQuestion.detailedExplanation = detailedExplanationText;
                         console.log("Lưu thành công.");
                     } catch (cacheError) {
@@ -939,6 +965,7 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
         window.startGame = startGame;
         window.checkAnswer = checkAnswer;
         window.goToNextQuestion = goToNextQuestion;
+        window.goToPreviousQuestion = goToPreviousQuestion;
         window.resetGame = resetGame;
         window.openLearnMoreModal = openLearnMoreModal;
         window.closeLearnMoreModal = closeLearnMoreModal;
