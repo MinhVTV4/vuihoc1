@@ -246,7 +246,7 @@
         ];
         
         let userId = null;
-        let userPlayedSessions = {}; // ⭐ UPDATE: Tracks played sessions instead of individual questions
+        let userPlayedSessions = {};
         let currentQuestionIndex = 0;
         let score = 0;
         let currentQuestion = null;
@@ -293,7 +293,6 @@
             topQuestionsList: document.getElementById('top-questions-list'),
         };
         
-        // ⭐ NEW: Loads user document containing played sessions data
         async function loadUserData() {
             if (!userId) return;
             const userDocRef = doc(db, 'users', userId);
@@ -312,7 +311,6 @@
             }
         }
         
-        // ⭐ NEW: Updates the user's document with the index of the session they just played
         async function updateUserPlayedSession(topicId, level, sessionIndex) {
             if (!userId) return;
             const key = `${topicId}_${level}`;
@@ -368,7 +366,6 @@
             return questionsWithIds;
         }
 
-        // ⭐ REBUILT: This function now finds an unplayed session (a batch of 10)
         async function getQuestionSessionFromCache(topic, level) {
             if (topic.id === 'random') return null;
             console.log(`Đang tìm một phiên câu hỏi chưa chơi từ cache...`);
@@ -420,27 +417,43 @@
             }
         }
         
+        // ⭐ UPDATE: Hàm này giờ sẽ trả về cả câu hỏi mẫu và chủ đề con mẫu
         async function getExistingQuestionSamples(topic, level, count = 25) {
             const collectionName = `${topic.id}_questions`;
-            const q = query(collection(db, collectionName), where("level", "==", level), limit(count * 2));
+            // Lấy nhiều tài liệu hơn để có cơ hội nhận được các chủ đề con duy nhất tốt hơn
+            const q = query(collection(db, collectionName), where("level", "==", level), limit(count * 3));
             try {
                 const querySnapshot = await getDocs(q);
-                const statements = [];
+                const samples = [];
                 querySnapshot.forEach(doc => {
-                    statements.push(doc.data().statement);
+                    const data = doc.data();
+                    samples.push({
+                        statement: data.statement,
+                        subtopic: data.subtopic || null // Xử lý các trường hợp chủ đề con có thể không tồn tại
+                    });
                 });
-                for (let i = statements.length - 1; i > 0; i--) {
+
+                // Xáo trộn mảng mẫu
+                for (let i = samples.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
-                    [statements[i], statements[j]] = [statements[j], statements[i]];
+                    [samples[i], samples[j]] = [samples[j], samples[i]];
                 }
-                return statements.slice(0, count);
+
+                const limitedSamples = samples.slice(0, count);
+                const statements = limitedSamples.map(s => s.statement);
+                // Lấy danh sách chủ đề con duy nhất, không rỗng
+                const subtopics = [...new Set(limitedSamples.map(s => s.subtopic).filter(st => st))];
+
+                console.log("Các chủ đề con đã tồn tại được tìm thấy:", subtopics);
+                return { statements, subtopics };
             } catch (error) {
                 console.error("Lỗi khi lấy mẫu câu hỏi:", error);
-                return [];
+                return { statements: [], subtopics: [] };
             }
         }
 
-        async function generateFullGameSession(topic, level, existingSamples = []) {
+        // ⭐ UPDATE: Hàm này giờ nhận cả câu hỏi và chủ đề con mẫu để tạo prompt thông minh hơn
+        async function generateFullGameSession(topic, level, samples = { statements: [], subtopics: [] }) {
             let levelDescription = '';
             switch(level) {
                 case 'easy': levelDescription = 'dễ, phù hợp cho trẻ em 6-10 tuổi'; break;
@@ -449,14 +462,16 @@
             }
 
             let prompt;
-            const uniquenessInstruction = existingSamples.length > 0
-                ? `8.  **ĐỘC NHẤT TUYỆT ĐỐI:** Dưới đây là danh sách một số câu hỏi đã có sẵn. **TUYỆT ĐỐI KHÔNG** tạo lại các câu hỏi có cùng nội dung hoặc ý tưởng tương tự:\n- ${existingSamples.join('\n- ')}`
-                : '';
+            const { statements, subtopics } = samples;
             
+            // Đối với chủ đề 'ngẫu nhiên', việc loại trừ chủ đề con ít liên quan hơn. Chúng ta sẽ chỉ tập trung vào loại trừ câu hỏi.
             if (topic.id === 'random') {
+                 const statementUniquenessInstruction = statements.length > 0
+                    ? `7.  **ĐỘC NHẤT TUYỆT ĐỐI:** Dưới đây là danh sách một số câu hỏi đã có sẵn. **TUYỆT ĐỐI KHÔNG** tạo lại các câu hỏi có cùng nội dung hoặc ý tưởng tương tự:\n- ${statements.join('\n- ')}`
+                    : '';
                 const allTopicNames = topics.filter(t => t.id !== 'random').map(t => `'${t.name}'`).join(', ');
                 prompt = `Hãy đóng vai một nhà sản xuất game show kiến thức "Sự Thật hay Hư Cấu" cực kỳ sáng tạo.
-Nhiệm vụ của bạn là thiết kế một kịch bản hoàn chỉnh gồm ${TOTAL_QUESTIONS_PER_GAME} câu hỏi cho một tập phát sóng ĐẶC BIỆT với chủ đề "NGẪU NHIÊN TỔNG HỢP".
+Nhiệm vụ của bạn là thiết kế một kịch bản hoàn chỉnh gồm ${TOTAL_QUESTIONS_PER_GAME} câu hỏi cho một tập phát sóng ĐẶC BIỆT với chủ đề "NGẪU NHÊN TỔNG HỢP".
 **Yêu cầu KỊCH BẢN:**
 1.  **ĐA DẠNG TUYỆT ĐỐI:** Tạo ${TOTAL_QUESTIONS_PER_GAME} câu hỏi từ nhiều lĩnh vực khác nhau nhất có thể. Lấy cảm hứng từ các chủ đề như: ${allTopicNames}. **MỖI CÂU HỎI PHẢI THUỘC MỘT CHỦ ĐỀ KHÁC NHAU.**
 2.  **Trình Độ:** ${levelDescription}.
@@ -465,10 +480,18 @@ Nhiệm vụ của bạn là thiết kế một kịch bản hoàn chỉnh gồm
     * **Câu "Sự thật"** phải gây ngạc nhiên, đi ngược lại suy nghĩ thông thường.
     * **Câu "Hư cấu"** phải dựa trên một lầm tưởng phổ biến hoặc một sự thật bị bóp méo tinh vi để nghe cực kỳ hợp lý.
 5.  **GIẢI THÍCH CHẤT LƯỢNG:** Với mỗi câu hỏi, phần 'explanation' phải là một đoạn tóm tắt súc tích (5-10 dòng) bằng **Markdown**, tập trung vào kiến thức. Sử dụng **2-3 gạch đầu dòng (dùng dấu \`*\`)** để nêu bật những sự thật thú vị hoặc lý do chính.
-6.  **KHÔNG TRÙNG LẶP:** Đảm bảo ${TOTAL_QUESTIONS_PER_GAME} câu hỏi không trùng lặp về ý tưởng với nhau.
-${uniquenessInstruction.replace('8.','7.')}
+6.  **KHÔNG TRÙNG LẶP NỘI BỘ:** Đảm bảo ${TOTAL_QUESTIONS_PER_GAME} câu hỏi không trùng lặp về ý tưởng với nhau.
+${statementUniquenessInstruction}
 Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công cụ \`create_quiz_game\` với kết quả của bạn.`;
             } else {
+                 const subtopicUniquenessInstruction = subtopics.length > 0
+                    ? `   * **7.2. Khai thác chủ đề con mới:** Các chủ đề con sau đã được sử dụng gần đây: ${subtopics.join(', ')}. **Hãy ưu tiên tạo câu hỏi thuộc các chủ đề con MỚI LẠ** và tránh lặp lại các chủ đề con này.`
+                    : '';
+
+                const statementUniquenessInstruction = statements.length > 0
+                    ? `   * **7.3. Không trùng lặp câu hỏi cũ:** Dưới đây là danh sách một số câu hỏi đã có sẵn. **TUYỆT ĐỐI KHÔNG** tạo lại các câu hỏi có cùng nội dung hoặc ý tưởng tương tự:\n- ${statements.join('\n- ')}`
+                    : '';
+
                 let subtopicPool = [...(topic.subtopics || [])];
                 let selectedSubtopics = [];
                 if (subtopicPool.length > 0) {
@@ -485,14 +508,16 @@ Nhiệm vụ của bạn là thiết kế một kịch bản hoàn chỉnh gồm
 **Yêu cầu KỊCH BẢN:**
 1.  **Chủ Đề Chính:** ${topic.prompt}.
 2.  **Trình Độ:** ${levelDescription}.
-3.  **ĐA DẠNG TUYỆT ĐỐI:** ${subtopicsString ? `Tạo mỗi câu hỏi dựa trên một trong các chủ đề con sau: ${subtopicsString}. **KHÔNG được lặp lại chủ đề con.**` : 'Tạo các câu hỏi thật đa dạng trong chủ đề chính.'}
+3.  **ĐA DẠNG CHỦ ĐỀ CON:** ${subtopicsString ? `Tạo mỗi câu hỏi dựa trên một trong các chủ đề con sau: ${subtopicsString}. **KHÔNG được lặp lại chủ đề con.**` : 'Tạo các câu hỏi thật đa dạng trong chủ đề chính.'}
 4.  **CÂN BẰNG HOÀN HẢO:** Bộ đề phải có tỉ lệ gần bằng nhau giữa câu "Sự thật" và "Hư cấu".
 5.  **CHẤT LƯỢNG VƯỢT TRỘI:**
     * **Câu "Sự thật"** phải gây ngạc nhiên, đi ngược lại suy nghĩ thông thường.
     * **Câu "Hư cấu"** phải dựa trên một lầm tưởng phổ biến hoặc một sự thật bị bóp méo tinh vi để nghe cực kỳ hợp lý.
 6.  **GIẢI THÍCH CHẤT LƯỢNG:** Với mỗi câu hỏi, phần 'explanation' phải là một đoạn tóm tắt súc tích (5-10 dòng) bằng **Markdown**, tập trung vào kiến thức. Sử dụng **2-3 gạch đầu dòng (dùng dấu \`*\`)** để nêu bật những sự thật thú vị hoặc lý do chính.
-7.  **KHÔNG TRÙNG LẶP:** Đảm bảo 10 câu hỏi không trùng lặp về ý tưởng với nhau.
-${uniquenessInstruction}
+7.  **YÊU CẦU VỀ TÍNH ĐỘC NHẤT (QUAN TRỌNG):**
+    * **7.1. Không trùng lặp nội bộ:** Đảm bảo 10 câu hỏi trong bộ đề này không trùng lặp ý tưởng với nhau.
+${subtopicUniquenessInstruction}
+${statementUniquenessInstruction}
 Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công cụ \`create_quiz_game\` với kết quả của bạn.`;
             }
 
@@ -523,7 +548,7 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
             }
         }
 
-        // ⭐ REBUILT: Implements the new session-based logic for Quick Play
+        // ⭐ UPDATE: Logic khởi tạo game giờ sẽ truyền cả câu hỏi và chủ đề con mẫu
         async function startGame(forceAI = false) {
             domElements.startScreen.style.display = 'none';
             domElements.gameUI.style.display = 'block';
@@ -691,7 +716,6 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
             }
         }
         
-        // ⭐ UPDATE: Auth logic now loads the user's session data
         function initAuth() {
             onAuthStateChanged(auth, async (user) => {
                 if (user) {
@@ -925,4 +949,3 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
     </script>
 </body>
 </html>
-
