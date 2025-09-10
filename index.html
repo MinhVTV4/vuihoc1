@@ -417,10 +417,8 @@
             }
         }
         
-        // ⭐ UPDATE: Hàm này giờ sẽ trả về cả câu hỏi mẫu và chủ đề con mẫu
         async function getExistingQuestionSamples(topic, level, count = 25) {
             const collectionName = `${topic.id}_questions`;
-            // Lấy nhiều tài liệu hơn để có cơ hội nhận được các chủ đề con duy nhất tốt hơn
             const q = query(collection(db, collectionName), where("level", "==", level), limit(count * 3));
             try {
                 const querySnapshot = await getDocs(q);
@@ -429,11 +427,10 @@
                     const data = doc.data();
                     samples.push({
                         statement: data.statement,
-                        subtopic: data.subtopic || null // Xử lý các trường hợp chủ đề con có thể không tồn tại
+                        subtopic: data.subtopic || null
                     });
                 });
 
-                // Xáo trộn mảng mẫu
                 for (let i = samples.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
                     [samples[i], samples[j]] = [samples[j], samples[i]];
@@ -441,7 +438,6 @@
 
                 const limitedSamples = samples.slice(0, count);
                 const statements = limitedSamples.map(s => s.statement);
-                // Lấy danh sách chủ đề con duy nhất, không rỗng
                 const subtopics = [...new Set(limitedSamples.map(s => s.subtopic).filter(st => st))];
 
                 console.log("Các chủ đề con đã tồn tại được tìm thấy:", subtopics);
@@ -452,7 +448,6 @@
             }
         }
 
-        // ⭐ UPDATE: Hàm này giờ nhận cả câu hỏi và chủ đề con mẫu để tạo prompt thông minh hơn
         async function generateFullGameSession(topic, level, samples = { statements: [], subtopics: [] }) {
             let levelDescription = '';
             switch(level) {
@@ -464,7 +459,6 @@
             let prompt;
             const { statements, subtopics } = samples;
             
-            // Đối với chủ đề 'ngẫu nhiên', việc loại trừ chủ đề con ít liên quan hơn. Chúng ta sẽ chỉ tập trung vào loại trừ câu hỏi.
             if (topic.id === 'random') {
                  const statementUniquenessInstruction = statements.length > 0
                     ? `7.  **ĐỘC NHẤT TUYỆT ĐỐI:** Dưới đây là danh sách một số câu hỏi đã có sẵn. **TUYỆT ĐỐI KHÔNG** tạo lại các câu hỏi có cùng nội dung hoặc ý tưởng tương tự:\n- ${statements.join('\n- ')}`
@@ -548,7 +542,6 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
             }
         }
 
-        // ⭐ UPDATE: Logic khởi tạo game giờ sẽ truyền cả câu hỏi và chủ đề con mẫu
         async function startGame(forceAI = false) {
             domElements.startScreen.style.display = 'none';
             domElements.gameUI.style.display = 'block';
@@ -836,35 +829,39 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
             domElements.finalMessage.textContent = message;
         }
         
+        // ⭐ UPDATE: Logic được tối ưu hóa để ưu tiên bộ nhớ cache
         function openLearnMoreModal() {
             if (!currentQuestion) return;
             domElements.learnMoreModal.classList.add("active");
-            
-            const initialContent = `
+
+            const headerHTML = `
                 <div class="modal-header-container">
                     <h3 class="modal-header-statement">${currentQuestion.statement}</h3>
                     <div class="modal-answer-badge ${currentQuestion.answer ? 'fact' : 'fiction'}">
                         ${currentQuestion.answer ? 'Sự Thật' : 'Hư Cấu'}
                     </div>
                 </div>
+            `;
+
+            // 1. Kiểm tra xem giải thích chi tiết đã được lưu trong cache chưa
+            if (currentQuestion.detailedExplanation) {
+                console.log("Hiển thị giải thích chi tiết được lưu trong bộ nhớ cache.");
+                domElements.modalBodyArea.innerHTML = headerHTML + `<div class="markdown-content">${marked.parse(currentQuestion.detailedExplanation)}</div>`;
+                return;
+            }
+            
+            // 2. Nếu chưa, hiển thị trình tải và tạo nó
+            const loadingContent = `
+                ${headerHTML}
                 <div class="flex flex-col items-center justify-center h-full p-8 text-center">
                     <div class="spinner"></div>
-                    <p class="mt-4 text-lg font-semibold text-slate-700 dark:text-slate-300">Đang tải dữ liệu...</p>
-                    <p class="text-sm text-slate-500 dark:text-slate-400">Xin chờ trong giây lát.</p>
+                    <p class="mt-4 text-lg font-semibold text-slate-700 dark:text-slate-300">Đang nhờ AI tạo giải thích sâu hơn...</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Việc này chỉ thực hiện một lần cho mỗi câu hỏi. Xin chờ trong giây lát.</p>
                 </div>
             `;
-            domElements.modalBodyArea.innerHTML = initialContent;
+            domElements.modalBodyArea.innerHTML = loadingContent;
 
             generateDetailedExplanation(selectedLevel).then(detailedExplanation => {
-                const headerHTML = `
-                    <div class="modal-header-container">
-                        <h3 class="modal-header-statement">${currentQuestion.statement}</h3>
-                        <div class="modal-answer-badge ${currentQuestion.answer ? 'fact' : 'fiction'}">
-                            ${currentQuestion.answer ? 'Sự Thật' : 'Hư Cấu'}
-                        </div>
-                    </div>
-                `;
-
                 if (detailedExplanation) {
                     domElements.modalBodyArea.innerHTML = headerHTML + `<div class="markdown-content">${marked.parse(detailedExplanation)}</div>`;
                 } else {
@@ -881,6 +878,7 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
             });
         }
         
+        // ⭐ UPDATE: Giờ đây, hàm sẽ lưu kết quả vào Firestore
         async function generateDetailedExplanation(level) {
             if (!textModel || !currentQuestion) return null;
             
@@ -899,9 +897,26 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
 
             const chatModel = getGenerativeModel(getAI(app,{backend:new GoogleAIBackend}),{model:"gemini-2.5-flash"});
             const prompt = `Hãy đóng vai một chuyên gia uyên bác. Dựa trên phát biểu sau: "${currentQuestion.statement}", hãy cung cấp một bài giải thích chi tiết, sâu sắc và thú vị bằng tiếng Việt. ${levelInstruction} Mở rộng từ lời giải thích ngắn gọn ban đầu: "${currentQuestion.explanation}". Sử dụng định dạng Markdown với các tiêu đề (###) để phân tách các ý chính.`;
+            
             try {
                 const result = await chatModel.generateContent(prompt);
-                return result.response.text();
+                const detailedExplanationText = result.response.text();
+
+                // 3. Lưu kết quả vào Firestore để sử dụng trong tương lai
+                if (detailedExplanationText && currentQuestion.id && currentQuestion.topicId) {
+                    console.log("Đang lưu giải thích chi tiết vào bộ nhớ cache...");
+                    const questionRef = doc(db, `${currentQuestion.topicId}_questions`, currentQuestion.id);
+                    try {
+                        await setDoc(questionRef, { detailedExplanation: detailedExplanationText }, { merge: true });
+                        // Cập nhật đối tượng cục bộ để ngăn chặn việc tìm nạp lại trong cùng một phiên
+                        currentQuestion.detailedExplanation = detailedExplanationText;
+                        console.log("Lưu thành công.");
+                    } catch (cacheError) {
+                        console.error("Lỗi khi lưu giải thích chi tiết vào bộ nhớ cache:", cacheError);
+                    }
+                }
+                
+                return detailedExplanationText;
             } catch(error) {
                 console.error("Lỗi khi tạo giải thích chi tiết:", error);
                 return null;
@@ -949,3 +964,4 @@ Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công c�
     </script>
 </body>
 </html>
+
