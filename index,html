@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sự Thật hay Hư Cấu - AI Vision</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Be Vietnam Pro', sans-serif; touch-action: manipulation; }
+        .card-enter { opacity: 0; transform: translateY(20px) scale(0.95); }
+        .card-enter-active { opacity: 1; transform: translateY(0) scale(1); transition: opacity 300ms, transform 300ms; }
+        .feedback-correct { box-shadow: 0 0 15px 5px rgba(34, 197, 94, 0.6); }
+        .feedback-incorrect { box-shadow: 0 0 15px 5px rgba(239, 68, 68, 0.6); }
+        .spinner { width: 40px; height: 40px; border: 5px solid rgba(0, 0, 0, 0.1); border-left-color: #4f46e5; border-radius: 50%; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .topic-btn, .level-btn { transition: all 0.2s ease-in-out; }
+        .topic-btn:hover, .level-btn:hover { transform: scale(1.05); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        .vote-btn { transition: transform 0.2s, color 0.2s; }
+        .vote-btn:hover { transform: scale(1.2); }
+        .vote-btn.voted-like { color: #22c55e; }
+        .vote-btn.voted-dislike { color: #ef4444; }
+        .vote-btn:disabled { cursor: not-allowed; opacity: 0.7; }
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; z-index: 50; }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
+        .modal-content { background: white; padding: 0; border-radius: 16px; width: 90%; max-width: 650px; max-height: 90vh; display: flex; flex-direction: column; transform: scale(0.95) translateY(10px); transition: transform 0.3s ease; position: relative; }
+        .modal-overlay.active .modal-content { transform: scale(1) translateY(0); }
+        .dark .modal-content { background: #0f172a; } /* slate-900 */
+        .modal-close-btn { position: absolute; top: 12px; right: 12px; background: rgba(0,0,0,0.1); border-radius: 9999px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background-color 0.2s; z-index: 60; }
+        .dark .modal-close-btn { background: rgba(255,255,255,0.1); }
+        
+        .markdown-content h3 { font-size: 1.25rem; font-weight: 700; margin-bottom: 8px; margin-top: 1rem; }
+        .dark .markdown-content h3 { color: inherit; }
+        .markdown-content ul { list-style-type: disc; padding-left: 20px; margin-top: 8px; }
+        .markdown-content li { margin-bottom: 4px; }
+        .markdown-content strong { color: #1e293b; }
+        .dark .markdown-content strong { color: #cbd5e1; }
+        
+        .explanation-header { padding: 12px; border-radius: 8px; font-size: 1.1rem; font-weight: 700; margin-bottom: 12px; color: white; display: flex; align-items: center; }
+        .explanation-header.correct { background-color: #16a34a; }
+        .explanation-header.incorrect { background-color: #dc2626; }
+        .explanation-body ul { list-style: none; padding: 0; }
+        .explanation-body li { background-color: #fefce8; border-left: 4px solid #f97316; padding: 12px 16px; border-radius: 6px; margin-bottom: 8px; line-height: 1.6; color: #3f3f46; }
+        .dark .explanation-body li { background-color: #27211a; border-left-color: #fb923c; color: #d4d4d8; }
+        .dark .explanation-body li p { color: #d4d4d8; }
+        
+        .modal-scroll-content { padding: 24px; overflow-y: auto; flex-grow: 1; }
+        .modal-header-statement { font-size: 1.5rem; font-weight: 700; color: #1e293b; line-height: 1.4; margin-bottom: 12px; }
+        .dark .modal-header-statement { color: #e2e8f0; }
+        .modal-answer-badge { display: inline-block; padding: 0.5rem 1.25rem; border-radius: 9999px; font-size: 1.1rem; font-weight: 700; color: white; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 1.5rem;}
+        .modal-answer-badge.fact { background-color: #16a34a; box-shadow: 0 4px 14px 0 rgba(22, 163, 74, 0.3); }
+        .modal-answer-badge.fiction { background-color: #dc2626; box-shadow: 0 4px 14px 0 rgba(220, 38, 38, 0.3); }
+        .modal-scroll-content .markdown-content h3 { color: #4338ca; border-bottom: 2px solid #e0e7ff; padding-bottom: 4px; margin-top: 16px; margin-bottom: 12px; }
+        .dark .modal-scroll-content .markdown-content h3 { color: #a5b4fc; border-bottom-color: #4f46e5; }
+        .modal-scroll-content .markdown-content p { color: #334155; line-height: 1.7; margin-bottom: 1em;}
+        .dark .modal-scroll-content .markdown-content p { color: #cbd5e1; }
+        .modal-scroll-content .markdown-content strong { color: #4f46e5; }
+        .dark .modal-scroll-content .markdown-content strong { color: #c7d2fe; }
+        .modal-scroll-content .markdown-content ul { list-style-position: inside; }
+        .modal-scroll-content .markdown-content li { color: #475569; margin-bottom: 8px; }
+        .dark .modal-scroll-content .markdown-content li { color: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 flex items-center justify-center min-h-screen p-4 transition-colors duration-500">
+    
+    <div id="auth-loading-overlay" class="fixed inset-0 bg-slate-100 dark:bg-slate-900 z-50 flex flex-col items-center justify-center">
+        <div class="spinner"></div>
+        <p class="mt-4 text-slate-600 dark:text-slate-300">Đang kết nối...</p>
+    </div>
+
+    <div id="game-container" class="w-full max-w-2xl mx-auto">
+        <div id="question-card" class="bg-white dark:bg-slate-800 rounded-2xl shadow-xl p-6 md:p-8 transition-all duration-300">
+            <div id="start-screen" class="text-center">
+                 <h1 class="text-3xl md:text-4xl font-bold text-indigo-600 dark:text-indigo-400 mb-2">Sự Thật hay Hư Cấu</h1>
+                <p class="text-slate-600 dark:text-slate-300 mb-6">Trò chơi kiến thức được tạo bởi AI Vision</p>
+                
+                <button id="best-questions-btn" onclick="openTopQuestionsModal()" class="w-full sm:w-auto mb-6 text-lg font-bold py-3 px-6 rounded-lg bg-amber-500 text-white hover:bg-amber-600">🏆 Câu Hỏi Hay Nhất</button>
+                
+                <div id="topic-selection-screen">
+                    <h2 class="text-xl font-semibold mb-6">Bước 1: Chọn một chủ đề</h2>
+                    <div id="topic-selection" class="grid grid-cols-2 md:grid-cols-3 gap-4"></div>
+                </div>
+
+                <div id="level-selection-screen" class="hidden">
+                    <div id="level-buttons-container">
+                        <h2 class="text-xl font-semibold mb-6">Bước 2: Chọn trình độ</h2>
+                        <div class="space-y-4">
+                            <button onclick="setLevelAndShowPlayModes('easy')" class="level-btn w-full text-lg font-bold py-4 px-6 rounded-lg bg-green-500 text-white">Cấp 1 <span class="font-normal text-sm block">(6-10 tuổi)</span></button>
+                            <button onclick="setLevelAndShowPlayModes('medium')" class="level-btn w-full text-lg font-bold py-4 px-6 rounded-lg bg-blue-500 text-white">Phổ thông <span class="font-normal text-sm block">(Mọi lứa tuổi)</span></button>
+                            <button onclick="setLevelAndShowPlayModes('hard')" class="level-btn w-full text-lg font-bold py-4 px-6 rounded-lg bg-red-500 text-white">Chuyên sâu <span class="font-normal text-sm block">(Thử thách)</span></button>
+                        </div>
+                        <button onclick="backToTopicSelection()" class="mt-6 text-sm text-indigo-600 dark:text-indigo-400 hover:underline">&larr; Quay lại chọn chủ đề</button>
+                    </div>
+
+                    <div id="play-mode-container" class="hidden">
+                        <h2 class="text-xl font-semibold mb-6">Bước 3: Chọn chế độ chơi</h2>
+                        <div class="space-y-4">
+                            <button onclick="startGame(false)" class="level-btn w-full text-lg font-bold py-4 px-6 rounded-lg bg-sky-500 text-white">⚡ Chơi Nhanh <span class="font-normal text-sm block">(Ưu tiên ngân hàng câu hỏi)</span></button>
+                            <button onclick="startGame(true)" class="level-btn w-full text-lg font-bold py-4 px-6 rounded-lg bg-purple-600 text-white">🧠 Chơi Sáng Tạo <span class="font-normal text-sm block">(Luôn tạo câu hỏi mới từ AI)</span></button>
+                        </div>
+                        <button onclick="backToLevelSelection()" class="mt-6 text-sm text-indigo-600 dark:text-indigo-400 hover:underline">&larr; Quay lại chọn trình độ</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="game-ui" class="hidden">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <button onclick="backToMenu()" class="text-sm text-indigo-600 dark:text-indigo-400 hover:underline">&larr; Quay lại</button>
+                        <h1 id="game-title" class="text-xl md:text-2xl font-bold text-indigo-600 dark:text-indigo-400">Chủ đề: Ngẫu nhiên</h1>
+                    </div>
+                    <div id="score" class="text-lg font-semibold bg-slate-200 dark:bg-slate-700 px-4 py-1 rounded-full">Điểm: 0</div>
+                </div>
+                <div class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 mb-6">
+                    <div id="progress-bar" class="bg-indigo-500 h-2.5 rounded-full" style="width: 0%"></div>
+                </div>
+                <p id="question-number" class="text-sm text-slate-500 dark:text-slate-400 mb-2 font-medium"></p>
+                <div id="question-area" class="min-h-[100px] md:min-h-[120px] flex items-center justify-center">
+                    <h2 id="question-text" class="text-xl md:text-2xl text-center font-semibold">Đang tìm câu hỏi...</h2>
+                    <div id="loading-spinner" class="spinner"></div>
+                </div>
+                <div id="explanation-container" class="mt-4 hidden">
+                    <div id="explanation-content"></div>
+                    <div class="flex justify-between items-center mt-4 border-t border-slate-200 dark:border-slate-700 pt-4">
+                        <button onclick="openLearnMoreModal()" class="text-sm font-semibold text-red-600 dark:text-red-500 hover:underline">Tìm hiểu sâu hơn &rarr;</button>
+                        <div id="vote-container" class="flex items-center space-x-4">
+                            <span class="text-sm text-slate-500 dark:text-slate-400">Hữu ích?</span>
+                            <button id="like-btn" class="vote-btn text-2xl text-slate-400 hover:text-green-500">👍</button>
+                            <button id="dislike-btn" class="vote-btn text-2xl text-slate-400 hover:text-red-500">👎</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="button-container" class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6" style="display: none;">
+                    <button id="true-btn" onclick="checkAnswer(true)" class="w-full text-lg font-bold py-4 px-6 rounded-lg bg-emerald-500 text-white hover:bg-emerald-600">Sự Thật</button>
+                    <button id="false-btn" onclick="checkAnswer(false)" class="w-full text-lg font-bold py-4 px-6 rounded-lg bg-rose-500 text-white hover:bg-rose-600">Hư Cấu</button>
+                    <button id="next-btn" onclick="goToNextQuestion()" class="hidden sm:col-span-2 w-full text-lg font-bold py-4 px-6 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">Câu tiếp theo</button>
+                </div>
+            </div>
+
+            <div id="final-score" class="text-center hidden">
+                <h2 id="final-title" class="text-3xl md:text-4xl font-bold mb-4">Hoàn thành!</h2>
+                <p class="text-xl mb-2">Điểm cuối cùng của bạn:</p>
+                <p id="final-score-text" class="text-6xl font-bold text-indigo-600 dark:text-indigo-400 mb-8">0</p>
+                <p id="final-message" class="text-lg mb-8"></p>
+                <button onclick="resetGame()" class="w-full sm:w-auto text-lg font-bold py-4 px-8 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">Chơi Lại</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modals -->
+    <div id="learn-more-modal" class="modal-overlay">
+        <div class="modal-content">
+            <button onclick="closeLearnMoreModal()" class="modal-close-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="text-slate-600 dark:text-slate-300" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8z"/></svg>
+            </button>
+            <div id="modal-body-area" class="modal-scroll-content"></div>
+        </div>
+    </div>
+    <div id="top-questions-modal" class="modal-overlay">
+        <div class="modal-content !p-6">
+            <button onclick="closeTopQuestionsModal()" class="modal-close-btn">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" class="text-slate-600 dark:text-slate-300" viewBox="0 0 16 16"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8z"/></svg>
+            </button>
+            <h2 class="text-2xl font-bold mb-4 text-amber-500 dark:text-amber-400">🏆 Top 10 Câu Hỏi Hay Nhất</h2>
+            <div id="top-questions-topic-selection" class="mb-4">
+                <p class="mb-2 font-semibold">Chọn chủ đề để xem bảng xếp hạng:</p>
+                <div id="top-questions-topics-list" class="grid grid-cols-2 md:grid-cols-3 gap-3"></div>
+            </div>
+            <div id="top-questions-content" class="hidden">
+                 <button onclick="backToTopTopicSelection()" class="mb-4 text-sm text-indigo-600 dark:text-indigo-400 hover:underline">&larr; Quay lại chọn chủ đề</button>
+                <div id="top-questions-spinner" class="flex justify-center my-8"><div class="spinner"></div></div>
+                <div id="top-questions-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+        import { getAI, getGenerativeModel, GoogleAIBackend } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-ai.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, query, where, doc, setDoc, serverTimestamp, getDoc, increment, writeBatch, orderBy, limit } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+      const firebaseConfig = {
+    apiKey: "AIzaSyAxIu9PQEEQie5oi8-9LhG9NMABHSgaVMM",
+    authDomain: "vuihoc-a0ef3.firebaseapp.com",
+    projectId: "vuihoc-a0ef3",
+    storageBucket: "vuihoc-a0ef3.firebasestorage.app",
+    messagingSenderId: "1070971370795",
+    appId: "1:1070971370795:web:5fe496f59365f67beed96e"
+  };
+
+        
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        let textModel;
+        
+        const questionSchema = {
+            type: "OBJECT",
+            properties: {
+                statement: { type: "STRING", description: "Phát biểu của câu đố." },
+                answer: { type: "BOOLEAN", description: "Đáp án, true cho 'Sự thật', false cho 'Hư cấu'." },
+                explanation: { type: "STRING", description: "Một bản tóm tắt giải thích chi tiết (5-10 dòng) bằng Markdown, tập trung vào kiến thức. Sử dụng 2-3 gạch đầu dòng (dùng '*') để nêu các ý chính." },
+                subtopic: { type: "STRING", description: "Chủ đề con cụ thể của câu hỏi này, ví dụ: 'Lỗ đen'."}
+            },
+            required: ["statement", "answer", "explanation", "subtopic"]
+        };
+
+        const createQuizGameTool = {
+            functionDeclarations: [{
+                name: "create_quiz_game",
+                description: "Tạo một bộ đề 10 câu hỏi 'Sự thật hay Hư cấu' hoàn chỉnh.",
+                parameters: {
+                    type: "OBJECT",
+                    properties: {
+                        questions: {
+                            type: "ARRAY",
+                            description: "Một mảng chứa chính xác 10 câu đố.",
+                            items: questionSchema
+                        }
+                    },
+                    required: ["questions"]
+                }
+            }]
+        };
+
+        try {
+            const ai = getAI(app, { backend: new GoogleAIBackend() });
+            textModel = getGenerativeModel(ai, { model: "gemini-2.5-flash", tools: createQuizGameTool, toolConfig: { functionCallingConfig: { mode: "ANY" } } });
+        } catch (e) { console.error("Lỗi khi khởi tạo Text Model:", e); }
+        
+        const TOTAL_QUESTIONS_PER_GAME = 10;
+        const topics = [
+            { id: 'random', name: 'Ngẫu nhiên', prompt: 'bất kỳ', color: 'bg-slate-500', subtopics: [] },
+            { id: 'space', name: 'Vũ trụ', prompt: 'khoa học vũ trụ', color: 'bg-indigo-500', subtopics: ['Các hành tinh trong Hệ Mặt Trời', 'Lỗ đen và các hiện tượng kỳ lạ', 'Lịch sử du hành vũ trụ', 'Các loại thiên hà và tinh vân', 'Các ngôi sao và vòng đời của chúng', 'Tiểu hành tinh và sao chổi', 'Thuyết Big Bang', 'Sự sống ngoài Trái Đất'] },
+            { id: 'animals', name: 'Động vật', prompt: 'thế giới động vật', color: 'bg-green-500', subtopics: ['Động vật có vú', 'Loài bò sát và lưỡng cư', 'Sinh vật biển', 'Côn trùng và thế giới tí hon', 'Các loài đã tuyệt chủng', 'Các loài chim', 'Hành vi kỳ lạ của động vật'] },
+            { id: 'lifescience', name: 'Khoa học & Đời sống', prompt: 'khoa học đời sống, cơ thể người, và tâm lý học', color: 'bg-teal-500', subtopics: ['Cơ thể con người', 'Các căn bệnh và y học', 'Tâm lý học hành vi', 'Giấc mơ và tiềm thức', 'Dinh dưỡng và thực phẩm', 'Các hiện tượng khoa học trong nhà bếp', 'Khám phá về DNA và di truyền'] },
+            { id: 'history', name: 'Lịch sử', prompt: 'lịch sử thế giới', color: 'bg-amber-600', subtopics: ['Các nền văn minh cổ đại', 'Các cuộc chiến tranh thế giới', 'Các phát minh thay đổi lịch sử', 'Những nhân vật lịch sử bí ẩn', 'Lịch sử Việt Nam', 'Thời Trung Cổ', 'Thời kỳ Phục Hưng'] },
+            { id: 'tech', name: 'Công nghệ', prompt: 'công nghệ và phát minh', color: 'bg-sky-500', subtopics: ['Lịch sử máy tính và internet', 'Trí tuệ nhân tạo (AI)', 'Công nghệ ngoài không gian', 'Các thiết bị công nghệ đột phá', 'An ninh mạng và hacker', 'Công nghệ thực tế ảo (VR/AR)', 'Năng lượng tái tạo'] },
+            { id: 'artculture', name: 'Văn hóa & Nghệ thuật', prompt: 'văn hóa, nghệ thuật, điện ảnh, và âm nhạc', color: 'bg-rose-500', subtopics: ['Lịch sử điện ảnh', 'Các tác phẩm hội họa kinh điển', 'Các dòng nhạc trên thế giới', 'Những cuốn sách thay đổi thế giới', 'Kiến trúc độc đáo', 'Trang phục truyền thống các nước', 'Lễ hội và phong tục kỳ lạ'] },
+            { id: 'myth', name: 'Thần thoại', prompt: 'thần thoại và truyền thuyết', color: 'bg-purple-500', subtopics: ['Thần thoại Hy Lạp và La Mã', 'Thần thoại Ai Cập', 'Thần thoại Bắc Âu', 'Các sinh vật huyền thoại', 'Truyền thuyết đô thị hiện đại', 'Thần thoại Nhật Bản', 'Vua Arthur và các hiệp sĩ'] },
+            { id: 'geography', name: 'Địa lý', prompt: 'địa lý thế giới', color: 'bg-emerald-500', subtopics: ['Các kỳ quan thiên nhiên thế giới', 'Những con sông và ngọn núi cao nhất', 'Các hiện tượng thời tiết cực đoan', 'Các sa mạc và rừng rậm lớn nhất', 'Địa lý các quốc gia đặc biệt', 'Các đại dương trên thế giới', 'Các thành phố bị lãng quên'] },
+        ];
+        
+        let userId = null;
+        let userPlayedSessions = {}; // ⭐ UPDATE: Tracks played sessions instead of individual questions
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let currentQuestion = null;
+        let selectedTopic = topics[0];
+        let selectedLevel = 'medium';
+        let currentGameSession = [];
+        let currentTopicForGame = null;
+
+        const domElements = {
+            authLoadingOverlay: document.getElementById('auth-loading-overlay'),
+            startScreen: document.getElementById('start-screen'),
+            topicSelectionScreen: document.getElementById('topic-selection-screen'),
+            levelSelectionScreen: document.getElementById('level-selection-screen'),
+            levelButtonsContainer: document.getElementById('level-buttons-container'),
+            playModeContainer: document.getElementById('play-mode-container'),
+            questionCard: document.getElementById('question-card'),
+            questionText: document.getElementById('question-text'),
+            questionNumberText: document.getElementById('question-number'),
+            scoreText: document.getElementById('score'),
+            explanationContainer: document.getElementById('explanation-container'),
+            explanationContent: document.getElementById('explanation-content'),
+            buttonContainer: document.getElementById('button-container'),
+            progressBar: document.getElementById('progress-bar'),
+            loadingSpinner: document.getElementById('loading-spinner'),
+            gameUI: document.getElementById('game-ui'),
+            finalScoreScreen: document.getElementById('final-score'),
+            finalScoreText: document.getElementById('final-score-text'),
+            finalMessage: document.getElementById('final-message'),
+            topicSelectionContainer: document.getElementById('topic-selection'),
+            gameTitle: document.getElementById('game-title'),
+            trueBtn: document.getElementById('true-btn'),
+            falseBtn: document.getElementById('false-btn'),
+            nextBtn: document.getElementById('next-btn'),
+            learnMoreModal: document.getElementById('learn-more-modal'),
+            modalBodyArea: document.getElementById('modal-body-area'),
+            voteContainer: document.getElementById('vote-container'),
+            likeBtn: document.getElementById('like-btn'),
+            dislikeBtn: document.getElementById('dislike-btn'),
+            topQuestionsModal: document.getElementById('top-questions-modal'),
+            topQuestionsTopicSelection: document.getElementById('top-questions-topic-selection'),
+            topQuestionsTopicsList: document.getElementById('top-questions-topics-list'),
+            topQuestionsContent: document.getElementById('top-questions-content'),
+            topQuestionsSpinner: document.getElementById('top-questions-spinner'),
+            topQuestionsList: document.getElementById('top-questions-list'),
+        };
+        
+        // ⭐ NEW: Loads user document containing played sessions data
+        async function loadUserData() {
+            if (!userId) return;
+            const userDocRef = doc(db, 'users', userId);
+            try {
+                const docSnap = await getDoc(userDocRef);
+                if (docSnap.exists() && docSnap.data().playedSessions) {
+                    userPlayedSessions = docSnap.data().playedSessions;
+                    console.log("Dữ liệu và các phiên đã chơi của người dùng đã được tải:", userPlayedSessions);
+                } else {
+                    userPlayedSessions = {};
+                    console.log("Không tìm thấy dữ liệu người dùng cũ, đang khởi tạo.");
+                }
+            } catch (error) {
+                console.error("Lỗi khi tải dữ liệu người dùng:", error);
+                userPlayedSessions = {};
+            }
+        }
+        
+        // ⭐ NEW: Updates the user's document with the index of the session they just played
+        async function updateUserPlayedSession(topicId, level, sessionIndex) {
+            if (!userId) return;
+            const key = `${topicId}_${level}`;
+            
+            if (!userPlayedSessions[key]) {
+                userPlayedSessions[key] = [];
+            }
+            if (!userPlayedSessions[key].includes(sessionIndex)) {
+                 userPlayedSessions[key].push(sessionIndex);
+            }
+
+            const userDocRef = doc(db, 'users', userId);
+            try {
+                await setDoc(userDocRef, { 
+                    playedSessions: { [key]: userPlayedSessions[key] }
+                }, { merge: true });
+                console.log(`Đã cập nhật phiên đã chơi cho ${key}: index ${sessionIndex}`);
+            } catch (error) {
+                console.error("Lỗi khi cập nhật phiên đã chơi:", error);
+            }
+        }
+        
+        async function cacheAndGetIdsForNewQuestions(questions, topic, level) {
+            const batch = writeBatch(db);
+            const collectionName = `${topic.id}_questions`;
+            const questionsWithIds = [];
+
+            for (const q of questions) {
+                const newDocRef = doc(collection(db, collectionName));
+                batch.set(newDocRef, { 
+                    ...q, 
+                    level: level, 
+                    createdAt: serverTimestamp(),
+                    likes: 0,
+                    dislikes: 0
+                });
+                questionsWithIds.push({ ...q, id: newDocRef.id, topicId: topic.id });
+            }
+            
+            await batch.commit();
+            console.log(`Đã lưu ${questions.length} câu hỏi mới và gán ID.`);
+
+            if (questions.length > 0 && topic.id !== 'random') {
+                const countKey = `${topic.id}_${level}`;
+                const metadataRef = doc(db, '_metadata', 'questionCounts');
+                try {
+                    await setDoc(metadataRef, { [countKey]: increment(questions.length) }, { merge: true });
+                } catch(error) {
+                    console.error("Lỗi khi cập nhật metadata:", error);
+                }
+            }
+
+            return questionsWithIds;
+        }
+
+        // ⭐ REBUILT: This function now finds an unplayed session (a batch of 10)
+        async function getQuestionSessionFromCache(topic, level) {
+            if (topic.id === 'random') return null;
+            console.log(`Đang tìm một phiên câu hỏi chưa chơi từ cache...`);
+            
+            const collectionName = `${topic.id}_questions`;
+            const q = query(collection(db, collectionName), where("level", "==", level), orderBy("createdAt", "asc"));
+            
+            try {
+                const querySnapshot = await getDocs(q);
+                const allQuestions = [];
+                querySnapshot.forEach(doc => {
+                    allQuestions.push({ id: doc.id, topicId: topic.id, ...doc.data() });
+                });
+
+                if (allQuestions.length < TOTAL_QUESTIONS_PER_GAME) {
+                    console.log(`Không đủ câu hỏi (${allQuestions.length}) để tạo thành một phiên hoàn chỉnh.`);
+                    return null;
+                }
+
+                const sessions = [];
+                for (let i = 0; i < allQuestions.length; i += TOTAL_QUESTIONS_PER_GAME) {
+                    const chunk = allQuestions.slice(i, i + TOTAL_QUESTIONS_PER_GAME);
+                    if (chunk.length === TOTAL_QUESTIONS_PER_GAME) {
+                        sessions.push(chunk);
+                    }
+                }
+
+                if (sessions.length === 0) {
+                    console.log("Không có phiên nào hợp lệ.");
+                    return null;
+                }
+
+                const playedSessionIndexes = userPlayedSessions[`${topic.id}_${level}`] || [];
+                console.log(`Các phiên đã chơi cho ${topic.id}_${level}:`, playedSessionIndexes);
+
+                for (let i = 0; i < sessions.length; i++) {
+                    if (!playedSessionIndexes.includes(i)) {
+                        console.log(`Tìm thấy phiên chưa chơi, index: ${i}.`);
+                        return { session: sessions[i], sessionIndex: i };
+                    }
+                }
+                
+                console.log("Tất cả các phiên trong cache đã được chơi.");
+                return null;
+
+            } catch (error) {
+                console.error("Lỗi khi lấy phiên câu hỏi từ cache:", error);
+                return null;
+            }
+        }
+        
+        async function getExistingQuestionSamples(topic, level, count = 25) {
+            const collectionName = `${topic.id}_questions`;
+            const q = query(collection(db, collectionName), where("level", "==", level), limit(count * 2));
+            try {
+                const querySnapshot = await getDocs(q);
+                const statements = [];
+                querySnapshot.forEach(doc => {
+                    statements.push(doc.data().statement);
+                });
+                for (let i = statements.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [statements[i], statements[j]] = [statements[j], statements[i]];
+                }
+                return statements.slice(0, count);
+            } catch (error) {
+                console.error("Lỗi khi lấy mẫu câu hỏi:", error);
+                return [];
+            }
+        }
+
+        async function generateFullGameSession(topic, level, existingSamples = []) {
+            let levelDescription = '';
+            switch(level) {
+                case 'easy': levelDescription = 'dễ, phù hợp cho trẻ em 6-10 tuổi'; break;
+                case 'hard': levelDescription = 'khó và chuyên sâu, dành cho chuyên gia'; break;
+                default: levelDescription = 'phổ thông, phù hợp với mọi lứa tuổi'; break;
+            }
+
+            let prompt;
+            const uniquenessInstruction = existingSamples.length > 0
+                ? `8.  **ĐỘC NHẤT TUYỆT ĐỐI:** Dưới đây là danh sách một số câu hỏi đã có sẵn. **TUYỆT ĐỐI KHÔNG** tạo lại các câu hỏi có cùng nội dung hoặc ý tưởng tương tự:\n- ${existingSamples.join('\n- ')}`
+                : '';
+            
+            if (topic.id === 'random') {
+                const allTopicNames = topics.filter(t => t.id !== 'random').map(t => `'${t.name}'`).join(', ');
+                prompt = `Hãy đóng vai một nhà sản xuất game show kiến thức "Sự Thật hay Hư Cấu" cực kỳ sáng tạo.
+Nhiệm vụ của bạn là thiết kế một kịch bản hoàn chỉnh gồm ${TOTAL_QUESTIONS_PER_GAME} câu hỏi cho một tập phát sóng ĐẶC BIỆT với chủ đề "NGẪU NHIÊN TỔNG HỢP".
+**Yêu cầu KỊCH BẢN:**
+1.  **ĐA DẠNG TUYỆT ĐỐI:** Tạo ${TOTAL_QUESTIONS_PER_GAME} câu hỏi từ nhiều lĩnh vực khác nhau nhất có thể. Lấy cảm hứng từ các chủ đề như: ${allTopicNames}. **MỖI CÂU HỎI PHẢI THUỘC MỘT CHỦ ĐỀ KHÁC NHAU.**
+2.  **Trình Độ:** ${levelDescription}.
+3.  **CÂN BẰNG HOÀN HẢO:** Bộ đề phải có tỉ lệ gần bằng nhau giữa câu "Sự thật" và "Hư cấu".
+4.  **CHẤT LƯỢNG VƯỢT TRỘI:**
+    * **Câu "Sự thật"** phải gây ngạc nhiên, đi ngược lại suy nghĩ thông thường.
+    * **Câu "Hư cấu"** phải dựa trên một lầm tưởng phổ biến hoặc một sự thật bị bóp méo tinh vi để nghe cực kỳ hợp lý.
+5.  **GIẢI THÍCH CHẤT LƯỢNG:** Với mỗi câu hỏi, phần 'explanation' phải là một đoạn tóm tắt súc tích (5-10 dòng) bằng **Markdown**, tập trung vào kiến thức. Sử dụng **2-3 gạch đầu dòng (dùng dấu \`*\`)** để nêu bật những sự thật thú vị hoặc lý do chính.
+6.  **KHÔNG TRÙNG LẶP:** Đảm bảo ${TOTAL_QUESTIONS_PER_GAME} câu hỏi không trùng lặp về ý tưởng với nhau.
+${uniquenessInstruction.replace('8.','7.')}
+Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công cụ \`create_quiz_game\` với kết quả của bạn.`;
+            } else {
+                let subtopicPool = [...(topic.subtopics || [])];
+                let selectedSubtopics = [];
+                if (subtopicPool.length > 0) {
+                     for (let i = 0; i < TOTAL_QUESTIONS_PER_GAME; i++) {
+                        if (subtopicPool.length === 0) subtopicPool = [...(topic.subtopics)];
+                        const randomIndex = Math.floor(Math.random() * subtopicPool.length);
+                        selectedSubtopics.push(subtopicPool.splice(randomIndex, 1)[0]);
+                    }
+                }
+                const subtopicsString = selectedSubtopics.join(', ');
+                
+                prompt = `Hãy đóng vai một nhà sản xuất game show kiến thức "Sự Thật hay Hư Cấu" cực kỳ sáng tạo.
+Nhiệm vụ của bạn là thiết kế một kịch bản hoàn chỉnh gồm ${TOTAL_QUESTIONS_PER_GAME} câu hỏi cho một tập phát sóng.
+**Yêu cầu KỊCH BẢN:**
+1.  **Chủ Đề Chính:** ${topic.prompt}.
+2.  **Trình Độ:** ${levelDescription}.
+3.  **ĐA DẠNG TUYỆT ĐỐI:** ${subtopicsString ? `Tạo mỗi câu hỏi dựa trên một trong các chủ đề con sau: ${subtopicsString}. **KHÔNG được lặp lại chủ đề con.**` : 'Tạo các câu hỏi thật đa dạng trong chủ đề chính.'}
+4.  **CÂN BẰNG HOÀN HẢO:** Bộ đề phải có tỉ lệ gần bằng nhau giữa câu "Sự thật" và "Hư cấu".
+5.  **CHẤT LƯỢNG VƯỢT TRỘI:**
+    * **Câu "Sự thật"** phải gây ngạc nhiên, đi ngược lại suy nghĩ thông thường.
+    * **Câu "Hư cấu"** phải dựa trên một lầm tưởng phổ biến hoặc một sự thật bị bóp méo tinh vi để nghe cực kỳ hợp lý.
+6.  **GIẢI THÍCH CHẤT LƯỢNG:** Với mỗi câu hỏi, phần 'explanation' phải là một đoạn tóm tắt súc tích (5-10 dòng) bằng **Markdown**, tập trung vào kiến thức. Sử dụng **2-3 gạch đầu dòng (dùng dấu \`*\`)** để nêu bật những sự thật thú vị hoặc lý do chính.
+7.  **KHÔNG TRÙNG LẶP:** Đảm bảo 10 câu hỏi không trùng lặp về ý tưởng với nhau.
+${uniquenessInstruction}
+Hãy tạo ra một bộ đề thật "hack não" và thú vị! Gọi công cụ \`create_quiz_game\` với kết quả của bạn.`;
+            }
+
+            try {
+                const result = await textModel.generateContent(prompt);
+                const functionCalls = result.response.functionCalls();
+                if (functionCalls && functionCalls[0]?.name === "create_quiz_game") {
+                    const gameData = functionCalls[0].args;
+                    if (gameData.questions && gameData.questions.length >= TOTAL_QUESTIONS_PER_GAME) {
+                        return gameData.questions.slice(0, TOTAL_QUESTIONS_PER_GAME);
+                    }
+                }
+                throw new Error("AI không trả về bộ đề hợp lệ.");
+            } catch (error) {
+                console.error("Lỗi khi tạo bộ đề:", error);
+                return null;
+            }
+        }
+        
+        function showLoading(isLoading, message = '') {
+            if (isLoading) {
+                domElements.questionText.textContent = message;
+                domElements.loadingSpinner.style.display = 'block';
+                domElements.buttonContainer.style.display = 'none';
+            } else {
+                domElements.loadingSpinner.style.display = 'none';
+                domElements.buttonContainer.style.display = 'grid';
+            }
+        }
+
+        // ⭐ REBUILT: Implements the new session-based logic for Quick Play
+        async function startGame(forceAI = false) {
+            domElements.startScreen.style.display = 'none';
+            domElements.gameUI.style.display = 'block';
+            domElements.explanationContainer.style.display = 'none';
+            currentQuestionIndex = 0;
+            score = 0;
+            currentGameSession = [];
+            updateScore();
+            
+            showLoading(true, `Đang chuẩn bị bộ đề...`);
+            
+            currentTopicForGame = selectedTopic;
+            const displayTopicName = currentTopicForGame.name;
+            domElements.gameTitle.textContent = `Chủ đề: ${displayTopicName} - ${levelNames[selectedLevel]}`; 
+
+            let questions = [];
+            let playedSessionIndex = -1;
+
+            if (!forceAI && currentTopicForGame.id !== 'random') {
+                const sessionData = await getQuestionSessionFromCache(currentTopicForGame, selectedLevel);
+                if (sessionData) {
+                    questions = sessionData.session;
+                    playedSessionIndex = sessionData.sessionIndex;
+                    console.log(`Bắt đầu trò chơi với phiên ${playedSessionIndex} từ cache.`);
+                }
+            }
+            
+            if (questions.length < TOTAL_QUESTIONS_PER_GAME) {
+                const loadingMessage = forceAI ? `Đang nhờ AI tạo bộ đề sáng tạo...` : `Cache không đủ/đã chơi hết, đang nhờ AI tạo bộ đề mới...`;
+                showLoading(true, loadingMessage);
+                
+                const samples = await getExistingQuestionSamples(currentTopicForGame, selectedLevel);
+                const newQuestionsFromAI = await generateFullGameSession(currentTopicForGame, selectedLevel, samples);
+
+                if (newQuestionsFromAI && newQuestionsFromAI.length > 0) {
+                    questions = await cacheAndGetIdsForNewQuestions(newQuestionsFromAI, currentTopicForGame, selectedLevel);
+                }
+            }
+            
+            if (questions && questions.length > 0) {
+                currentGameSession = questions;
+                if (playedSessionIndex !== -1) {
+                    updateUserPlayedSession(currentTopicForGame.id, selectedLevel, playedSessionIndex);
+                }
+                displayQuestion();
+            } else {
+                showLoading(false);
+                domElements.questionText.textContent = "Không thể tạo bộ đề. Vui lòng thử lại.";
+            }
+        }
+        
+        function displayQuestion() {
+            if (currentQuestionIndex >= currentGameSession.length) {
+                showFinalScore();
+                return;
+            }
+            currentQuestion = currentGameSession[currentQuestionIndex];
+            
+            domElements.likeBtn.className = 'vote-btn text-2xl text-slate-400 hover:text-green-500';
+            domElements.dislikeBtn.className = 'vote-btn text-2xl text-slate-400 hover:text-red-500';
+            domElements.likeBtn.disabled = false;
+            domElements.dislikeBtn.disabled = false;
+            domElements.likeBtn.onclick = () => voteOnQuestion('like');
+            domElements.dislikeBtn.onclick = () => voteOnQuestion('dislike');
+
+            domElements.questionCard.classList.remove('card-enter-active', 'feedback-correct', 'feedback-incorrect');
+            setTimeout(() => domElements.questionCard.classList.add('card-enter-active'), 50);
+            domElements.explanationContainer.style.display = 'none';
+            domElements.trueBtn.style.display = 'block';
+            domElements.falseBtn.style.display = 'block';
+            domElements.nextBtn.style.display = 'none';
+            showLoading(false);
+            domElements.questionText.innerHTML = marked.parseInline(currentQuestion.statement);
+            domElements.questionNumberText.textContent = `Câu hỏi ${currentQuestionIndex + 1} trên ${TOTAL_QUESTIONS_PER_GAME}`;
+            domElements.progressBar.style.width = `${((currentQuestionIndex + 1) / TOTAL_QUESTIONS_PER_GAME) * 100}%`;
+        }
+        
+        async function voteOnQuestion(voteType) {
+            if (!currentQuestion || !currentQuestion.id || !currentQuestion.topicId) return;
+            
+            domElements.likeBtn.disabled = true;
+            domElements.dislikeBtn.disabled = true;
+
+            const collectionName = `${currentQuestion.topicId}_questions`;
+            const questionRef = doc(db, collectionName, currentQuestion.id);
+            const fieldToUpdate = voteType === 'like' ? 'likes' : 'dislikes';
+
+            try {
+                await setDoc(questionRef, { [fieldToUpdate]: increment(1) }, { merge: true });
+                if (voteType === 'like') {
+                    domElements.likeBtn.classList.add('voted-like');
+                } else {
+                    domElements.dislikeBtn.classList.add('voted-dislike');
+                }
+            } catch (error) {
+                console.error("Lỗi khi vote:", error);
+                domElements.likeBtn.disabled = false;
+                domElements.dislikeBtn.disabled = false;
+            }
+        }
+        
+        function openTopQuestionsModal() {
+            domElements.topQuestionsModal.classList.add('active');
+            domElements.topQuestionsContent.style.display = 'none';
+            domElements.topQuestionsTopicSelection.style.display = 'block';
+            if(domElements.topQuestionsTopicsList.childElementCount === 0) {
+                 topics.filter(t => t.id !== 'random').forEach(topic => {
+                    const button = document.createElement('button');
+                    button.textContent = topic.name;
+                    button.className = `w-full text-md font-bold py-3 px-2 rounded-lg text-white ${topic.color}`;
+                    button.onclick = () => selectTopQuestionTopic(topic);
+                    domElements.topQuestionsTopicsList.appendChild(button);
+                });
+            }
+        }
+
+        function closeTopQuestionsModal() {
+            domElements.topQuestionsModal.classList.remove('active');
+        }
+
+        function backToTopTopicSelection() {
+             domElements.topQuestionsContent.style.display = 'none';
+             domElements.topQuestionsTopicSelection.style.display = 'block';
+        }
+
+        async function selectTopQuestionTopic(topic) {
+            domElements.topQuestionsTopicSelection.style.display = 'none';
+            domElements.topQuestionsContent.style.display = 'block';
+            domElements.topQuestionsList.innerHTML = '';
+            domElements.topQuestionsSpinner.style.display = 'flex';
+
+            const collectionName = `${topic.id}_questions`;
+            const q = query(collection(db, collectionName), orderBy('likes', 'desc'), limit(10));
+
+            try {
+                const querySnapshot = await getDocs(q);
+                domElements.topQuestionsSpinner.style.display = 'none';
+                if (querySnapshot.empty) {
+                    domElements.topQuestionsList.innerHTML = '<p>Chưa có câu hỏi nào được xếp hạng cho chủ đề này.</p>';
+                    return;
+                }
+                let rank = 1;
+                querySnapshot.forEach(doc => {
+                    const data = doc.data();
+                    const questionEl = document.createElement('div');
+                    questionEl.className = 'p-4 border-b dark:border-slate-700';
+                    questionEl.innerHTML = `
+                        <p class="font-semibold text-lg">${rank}. ${data.statement}</p>
+                        <p class="text-sm mt-1">👍 ${data.likes || 0} Lượt thích</p>
+                        <details class="mt-2 text-sm">
+                            <summary class="cursor-pointer text-indigo-600 dark:text-indigo-400">Xem đáp án & giải thích</summary>
+                            <div class="mt-2 p-3 bg-slate-100 dark:bg-slate-700 rounded-md markdown-content">
+                                <p><strong>Đáp án:</strong> ${data.answer ? 'Sự thật' : 'Hư cấu'}</p>
+                                <div class="mt-1">${marked.parse(data.explanation)}</div>
+                            </div>
+                        </details>
+                    `;
+                    domElements.topQuestionsList.appendChild(questionEl);
+                    rank++;
+                });
+            } catch (error) {
+                console.error("Lỗi khi lấy top 10:", error);
+                domElements.topQuestionsSpinner.style.display = 'none';
+                domElements.topQuestionsList.innerHTML = '<p class="text-red-500">Không thể tải bảng xếp hạng. Vui lòng thử lại.</p>';
+            }
+        }
+        
+        // ⭐ UPDATE: Auth logic now loads the user's session data
+        function initAuth() {
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                } else {
+                    try {
+                        const userCredential = await signInAnonymously(auth);
+                        userId = userCredential.user.uid;
+                    } catch (error) {
+                        domElements.authLoadingOverlay.innerHTML = '<p class="text-red-500 font-semibold">Lỗi kết nối.</p>';
+                        return;
+                    }
+                }
+                await loadUserData();
+                domElements.authLoadingOverlay.style.display = 'none';
+            });
+        }
+        
+        const levelNames = { 
+            easy: 'Cấp 1', 
+            medium: 'Phổ thông', 
+            hard: 'Chuyên sâu' 
+        };
+        
+        function backToMenu() {
+            domElements.gameUI.style.display = 'none';
+            domElements.finalScoreScreen.style.display = 'none';
+            domElements.startScreen.style.display = 'block';
+            domElements.levelSelectionScreen.style.display = 'none';
+            domElements.topicSelectionScreen.style.display = 'block';
+        }
+        
+        function selectTopic(id) { 
+            selectedTopic = topics.find(t => t.id === id); 
+            domElements.topicSelectionScreen.style.display = 'none'; 
+            domElements.levelSelectionScreen.style.display = 'block'; 
+            domElements.playModeContainer.style.display = 'none';
+            domElements.levelButtonsContainer.style.display = 'block';
+        }
+
+        function setLevelAndShowPlayModes(level) {
+            selectedLevel = level;
+            domElements.levelButtonsContainer.style.display = 'none';
+            domElements.playModeContainer.style.display = 'block';
+        }
+
+        function backToLevelSelection() {
+            domElements.playModeContainer.style.display = 'none';
+            domElements.levelButtonsContainer.style.display = 'block';
+        }
+        
+        function backToTopicSelection() { 
+            domElements.levelSelectionScreen.style.display = 'none'; 
+            domElements.topicSelectionScreen.style.display = 'block'; 
+        }
+        
+        function resetGame() { 
+            domElements.finalScoreScreen.style.display = 'none'; 
+            backToMenu(); 
+        }
+        
+        function checkAnswer(userAnswer) {
+            if (!currentQuestion) return;
+            domElements.trueBtn.style.display = 'none';
+            domElements.falseBtn.style.display = 'none';
+            domElements.nextBtn.style.display = 'block';
+            const isCorrect = currentQuestion.answer === userAnswer;
+            if (isCorrect) {
+                score++;
+                domElements.questionCard.classList.add("feedback-correct");
+            } else {
+                domElements.questionCard.classList.add("feedback-incorrect");
+            }
+            updateScore();
+            showExplanation();
+        }
+        
+        function goToNextQuestion() {
+            currentQuestionIndex++;
+            displayQuestion();
+        }
+        
+        function showExplanation() {
+            const isCorrectAnswer = currentQuestion.answer;
+            const headerText = isCorrectAnswer ? "✅ Đúng vậy, đó là Sự thật!" : "❌ Chính xác, đó là Hư cấu!";
+            const headerClass = isCorrectAnswer ? 'correct' : 'incorrect';
+
+            const explanationHTML = `
+                <div class="explanation-header ${headerClass}">
+                    ${headerText}
+                </div>
+                <div class="explanation-body markdown-content">
+                    ${marked.parse(currentQuestion.explanation)}
+                </div>
+            `;
+            
+            domElements.explanationContent.innerHTML = explanationHTML;
+            domElements.explanationContainer.style.display = "block";
+        }
+        
+        function updateScore() {
+            domElements.scoreText.innerHTML = `Điểm: ${score}`;
+        }
+        
+        function showFinalScore() {
+            domElements.gameUI.style.display = "none";
+            domElements.finalScoreScreen.style.display = "block";
+            domElements.finalScoreText.textContent = score;
+            let message = "Cố gắng hơn nhé! Còn nhiều điều thú vị để khám phá.";
+            const percentage = (score / TOTAL_QUESTIONS_PER_GAME) * 100;
+            if (percentage === 100) {
+                message = "Tuyệt vời! Bạn là một bậc thầy sự thật!";
+            } else if (percentage >= 75) {
+                message = "Làm tốt lắm! Kiến thức của bạn thật đáng nể.";
+            } else if (percentage >= 50) {
+                message = "Không tệ! Bạn đã phân biệt được khá nhiều sự thật.";
+            }
+            domElements.finalMessage.textContent = message;
+        }
+        
+        function openLearnMoreModal() {
+            if (!currentQuestion) return;
+            domElements.learnMoreModal.classList.add("active");
+            
+            const initialContent = `
+                <div class="modal-header-container">
+                    <h3 class="modal-header-statement">${currentQuestion.statement}</h3>
+                    <div class="modal-answer-badge ${currentQuestion.answer ? 'fact' : 'fiction'}">
+                        ${currentQuestion.answer ? 'Sự Thật' : 'Hư Cấu'}
+                    </div>
+                </div>
+                <div class="flex flex-col items-center justify-center h-full p-8 text-center">
+                    <div class="spinner"></div>
+                    <p class="mt-4 text-lg font-semibold text-slate-700 dark:text-slate-300">Đang tải dữ liệu...</p>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Xin chờ trong giây lát.</p>
+                </div>
+            `;
+            domElements.modalBodyArea.innerHTML = initialContent;
+
+            generateDetailedExplanation(selectedLevel).then(detailedExplanation => {
+                const headerHTML = `
+                    <div class="modal-header-container">
+                        <h3 class="modal-header-statement">${currentQuestion.statement}</h3>
+                        <div class="modal-answer-badge ${currentQuestion.answer ? 'fact' : 'fiction'}">
+                            ${currentQuestion.answer ? 'Sự Thật' : 'Hư Cấu'}
+                        </div>
+                    </div>
+                `;
+
+                if (detailedExplanation) {
+                    domElements.modalBodyArea.innerHTML = headerHTML + `<div class="markdown-content">${marked.parse(detailedExplanation)}</div>`;
+                } else {
+                    domElements.modalBodyArea.innerHTML = headerHTML + `
+                        <div class="text-center p-8">
+                            <p class="text-red-500 font-semibold">Rất tiếc, không thể tạo nội dung.</p>
+                            <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Đã có lỗi xảy ra trong quá trình xử lý. Vui lòng thử lại.</p>
+                            <button onclick="openLearnMoreModal()" class="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-semibold">
+                                Thử lại
+                            </button>
+                        </div>
+                    `;
+                }
+            });
+        }
+        
+        async function generateDetailedExplanation(level) {
+            if (!textModel || !currentQuestion) return null;
+            
+            let levelInstruction = '';
+            switch(level) {
+                case 'easy':
+                    levelInstruction = 'Hãy giải thích như đang nói với một đứa trẻ 8 tuổi. Dùng từ ngữ cực kỳ đơn giản, các câu ngắn gọn, và các ví dụ gần gũi, dễ hình dung. Tránh mọi thuật ngữ phức tạp.';
+                    break;
+                case 'hard':
+                    levelInstruction = 'Hãy đi sâu vào các chi tiết kỹ thuật, các thuật ngữ chuyên ngành, và các bối cảnh lịch sử hoặc khoa học phức tạp liên quan.';
+                    break;
+                default:
+                    levelInstruction = 'Hãy giải thích một cách rõ ràng, mạch lạc cho đối tượng phổ thông, cung cấp thêm các thông tin thú vị và mở rộng kiến thức.';
+                    break;
+            }
+
+            const chatModel = getGenerativeModel(getAI(app,{backend:new GoogleAIBackend}),{model:"gemini-2.5-flash"});
+            const prompt = `Hãy đóng vai một chuyên gia uyên bác. Dựa trên phát biểu sau: "${currentQuestion.statement}", hãy cung cấp một bài giải thích chi tiết, sâu sắc và thú vị bằng tiếng Việt. ${levelInstruction} Mở rộng từ lời giải thích ngắn gọn ban đầu: "${currentQuestion.explanation}". Sử dụng định dạng Markdown với các tiêu đề (###) để phân tách các ý chính.`;
+            try {
+                const result = await chatModel.generateContent(prompt);
+                return result.response.text();
+            } catch(error) {
+                console.error("Lỗi khi tạo giải thích chi tiết:", error);
+                return null;
+            }
+        }
+        
+        function closeLearnMoreModal() {
+            domElements.learnMoreModal.classList.remove('active');
+        }
+        
+        window.openTopQuestionsModal = openTopQuestionsModal;
+        window.closeTopQuestionsModal = closeTopQuestionsModal;
+        window.backToTopTopicSelection = backToTopTopicSelection;
+        window.selectTopQuestionTopic = selectTopQuestionTopic;
+        window.backToMenu = backToMenu;
+        window.selectTopic = selectTopic;
+        window.setLevelAndShowPlayModes = setLevelAndShowPlayModes;
+        window.backToLevelSelection = backToLevelSelection;
+        window.backToTopicSelection = backToTopicSelection;
+        window.startGame = startGame;
+        window.checkAnswer = checkAnswer;
+        window.goToNextQuestion = goToNextQuestion;
+        window.resetGame = resetGame;
+        window.openLearnMoreModal = openLearnMoreModal;
+        window.closeLearnMoreModal = closeLearnMoreModal;
+        
+        function completeInit() {
+            topics.forEach(topic => {
+                const button = document.createElement('button');
+                button.textContent = topic.name;
+                button.className = `topic-btn w-full text-lg font-bold py-6 px-4 rounded-lg text-white ${topic.color}`;
+                button.onclick = () => selectTopic(topic.id);
+                domElements.topicSelectionContainer.appendChild(button);
+            });
+            domElements.learnMoreModal.addEventListener('click', (event) => {
+                if (event.target === domElements.learnMoreModal) closeLearnMoreModal();
+            });
+             domElements.topQuestionsModal.addEventListener('click', (event) => {
+                if (event.target === domElements.topQuestionsModal) closeTopQuestionsModal();
+            });
+            initAuth();
+        }
+
+        completeInit();
+    </script>
+</body>
+</html>
+
